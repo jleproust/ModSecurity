@@ -32,7 +32,7 @@
 #ifdef __cplusplus
 
 namespace modsecurity {
-namespace Variables {
+namespace variables {
 class Variable;
 class Variables;
 }
@@ -52,7 +52,7 @@ class Operator;
 class Rule {
  public:
     Rule(operators::Operator *_op,
-            Variables::Variables *_variables,
+            variables::Variables *_variables,
             std::vector<actions::Action *> *_actions,
             std::string fileName,
             int lineNumber);
@@ -77,13 +77,13 @@ class Rule {
         int *nth);
 
     void getVariablesExceptions(Transaction *t,
-        Variables::Variables *exclusion, Variables::Variables *addition);
-    inline void getFinalVars(Variables::Variables *vars,
-        Variables::Variables *eclusion, Transaction *trans);
+        variables::Variables *exclusion, variables::Variables *addition);
+    inline void getFinalVars(variables::Variables *vars,
+        variables::Variables *eclusion, Transaction *trans);
     bool checkExcludedVariable(const std::string& key,
                                const std::string& excluded);
     bool checkExclusions(const std::string &key,
-                         Variables::Variables& exclusion,
+                         variables::Variables& exclusion,
                          Transaction* trans);
     void executeActionsAfterFullMatch(Transaction *trasn,
         bool containsDisruptive, std::shared_ptr<RuleMessage> ruleMessage);
@@ -143,7 +143,7 @@ class Rule {
     int m_lineNumber;
     int m_maturity;
     int m_phase;
-    modsecurity::Variables::Variables *m_variables;
+    modsecurity::variables::Variables *m_variables;
     operators::Operator *m_op;
     Rule *m_chainedRuleChild;
     Rule *m_chainedRuleParent;

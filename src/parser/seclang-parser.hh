@@ -331,9 +331,15 @@ using modsecurity::Variables::VariableModificatorCount;
 using modsecurity::Variables::XML;
 
 using namespace modsecurity;
+<<<<<<< HEAD
 
 using modsecurity::operators::Operator;
 
+=======
+using namespace modsecurity::variables;
+using namespace modsecurity::Utils;
+using namespace modsecurity::operators;
+>>>>>>> Renames namespace Variables to variables
 
 
 #define CHECK_VARIATION_DECL \
