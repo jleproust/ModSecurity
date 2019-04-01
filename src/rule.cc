@@ -547,10 +547,9 @@ inline void Rule::getFinalVars(Variables::Variables *vars,
 
 bool Rule::checkExcludedVariable(const std::string& key,
                                  const std::string& excluded) {
-    bool res = false;
     // exact match
     if (key == excluded) {
-        res = true;
+        return true;
     }
     // collection match: excluded is a prefix of key, and next key char is :
     bool isCollection = excluded.find(':') == std::string::npos &&
@@ -560,7 +559,7 @@ bool Rule::checkExcludedVariable(const std::string& key,
             std::mismatch(excluded.begin(), excluded.end(), key.begin()).first
                 == excluded.end() &&
             key.at(excluded.length()) == ':') {
-        res = true;
+        return true;
     }
     // variable prefix match inside a collection if exclusion ends with .
     bool isVariablePrefix = excluded.find(':') != std::string::npos &&
@@ -569,9 +568,9 @@ bool Rule::checkExcludedVariable(const std::string& key,
             key.length() > excluded.length() &&
             std::mismatch(excluded.begin(), excluded.end(), key.begin()).first
                 == excluded.end()) {
-        res = true;
+        return true;
     }
-    return res;
+    return false;
 }
 
 bool Rule::checkExclusions(const std::string &key,
