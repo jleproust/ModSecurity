@@ -545,6 +545,60 @@ inline void Rule::getFinalVars(Variables::Variables *vars,
 }
 
 
+bool Rule::checkExcludedVariable(const std::string& key,
+                                 const std::string& excluded) {
+    bool res = false;
+    // exact match
+    if (key == excluded) {
+        res = true;
+    }
+    // collection match: excluded is a prefix of key, and next key char is :
+    bool isCollection = excluded.find(':') == std::string::npos &&
+                            excluded.find('.') == std::string::npos;
+    if (isCollection &&
+            key.length() > excluded.length() &&
+            std::mismatch(excluded.begin(), excluded.end(), key.begin()).first
+                == excluded.end() &&
+            key.at(excluded.length()) == ':') {
+        res = true;
+    }
+    // variable prefix match inside a collection if exclusion ends with .
+    bool isVariablePrefix = excluded.find(':') != std::string::npos &&
+                            excluded.back() == '.';
+    if (isVariablePrefix &&
+            key.length() > excluded.length() &&
+            std::mismatch(excluded.begin(), excluded.end(), key.begin()).first
+                == excluded.end()) {
+        res = true;
+    }
+    return res;
+}
+
+bool Rule::checkExclusions(const std::string &key,
+                           Variables::Variables& exclusion,
+                           Transaction* trans) {
+    if (exclusion.contains(key)) {
+        return true;
+    }
+    if (std::find_if(trans->m_ruleRemoveTargetById.begin(),
+                     trans->m_ruleRemoveTargetById.end(),
+                     [&, this](std::pair<int, std::string> &m) -> bool {
+                        return m.first == m_ruleId &&
+                            checkExcludedVariable(key, m.second);
+                     }) != trans->m_ruleRemoveTargetById.end()) {
+        return true;
+    }
+    if (std::find_if(trans->m_ruleRemoveTargetByTag.begin(),
+                     trans->m_ruleRemoveTargetByTag.end(),
+                     [&, this](std::pair<std::string, std::string> &m) -> bool {
+                        return containsTag(m.first, trans) &&
+                            checkExcludedVariable(key, m.second);
+                     }) != trans->m_ruleRemoveTargetByTag.end()) {
+        return true;
+    }
+    return false;
+}
+
 
 void Rule::executeAction(Transaction *trans,
     bool containsBlock, std::shared_ptr<RuleMessage> ruleMessage,
@@ -699,24 +753,7 @@ bool Rule::evaluate(Transaction *trans,
             const std::string &value = v->m_value;
             const std::string &key = v->m_key;
 
-            if (exclusion.contains(v->m_key) ||
-                std::find_if(trans->m_ruleRemoveTargetById.begin(),
-                    trans->m_ruleRemoveTargetById.end(),
-                    [&, v, this](std::pair<int, std::string> &m) -> bool {
-                        return m.first == m_ruleId && m.second == v->m_key;
-                    }) != trans->m_ruleRemoveTargetById.end()
-            ) {
-                delete v;
-                v = NULL;
-                continue;
-            }
-            if (exclusion.contains(v->m_key) ||
-                std::find_if(trans->m_ruleRemoveTargetByTag.begin(),
-                    trans->m_ruleRemoveTargetByTag.end(),
-                    [&, v, trans, this](std::pair<std::string, std::string> &m) -> bool {
-                        return containsTag(m.first, trans) && m.second == v->m_key;
-                    }) != trans->m_ruleRemoveTargetByTag.end()
-            ) {
+            if (checkExclusions(key, exclusion, trans)) {
                 delete v;
                 v = NULL;
                 continue;
