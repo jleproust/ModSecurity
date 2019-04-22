@@ -1,4 +1,8 @@
+<<<<<<< HEAD
 // A Bison parser, made by GNU Bison 3.0.4.
+=======
+// A Bison parser, made by GNU Bison 3.3.2.
+>>>>>>> parser: new bison version
 
 // Positions for Bison parsers in C++
 
