@@ -31,13 +31,12 @@ namespace variables {
 class HighestSeverity : public Variable {
  public:
     explicit HighestSeverity(std::string _name)
-        : Variable(_name),
-        m_retName("HIGHEST_SEVERITY") { }
+        : Variable(_name)
+    { }
 
     void evaluate(Transaction *transaction,
         Rule *rule,
         std::vector<const VariableValue *> *l) override;
-    std::string m_retName;
 };
 
 

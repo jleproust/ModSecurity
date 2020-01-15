@@ -294,17 +294,9 @@ bool Transaction::extractArguments(const std::string &orig,
 
         std::string key;
         std::string value;
-        std::vector<std::string> key_value = utils::string::ssplit(t, sep2);
-        for (auto& a : key_value) {
-            if (i == 0) {
-                key = a;
-            } else if (i == 1) {
-                value = a;
-            } else {
-                value = value + "=" + a;
-            }
-            i++;
-        }
+        std::pair<std::string, std::string> key_value_pair = utils::string::ssplit_pair(t, sep2);
+        key = key_value_pair.first;
+        value = key_value_pair.second;
 
         key_s = (key.length() + 1);
         value_s = (value.length() + 1);
@@ -562,20 +554,64 @@ int Transaction::addRequestHeader(const std::string& key,
 
     if (keyl == "cookie") {
         size_t localOffset = m_variableOffset;
-        std::vector<std::string> cookies = utils::string::ssplit(value, ';');
-        for (const std::string &c : cookies) {
-            std::vector<std::string> s = utils::string::split(c,
-               '=');
-            if (s.size() > 1) {
-                if (s[0].at(0) == ' ') {
-                    s[0].erase(0, 1);
-                }
-                m_variableRequestCookiesNames.set(s[0],
-                    s[0], localOffset);
+        size_t pos;
 
-                localOffset = localOffset + s[0].size() + 1;
-                m_variableRequestCookies.set(s[0], s[1], localOffset);
-                localOffset = localOffset + s[1].size() + 2;
+        std::vector<std::string> cookies = utils::string::ssplit(value, ';');
+
+        if (!cookies.empty()) {
+            // Get rid of any optional whitespace after the cookie-string
+            // (i.e. after the end of the final cookie-pair)
+            std::string& final_cookie_pair = cookies.back();
+            while (!final_cookie_pair.empty() && isspace(final_cookie_pair.back())) {
+                final_cookie_pair.pop_back();
+            }
+        }
+
+        for (const std::string &c : cookies) {
+            // skip empty substring, eg "Cookie: ;;foo=bar"
+            if (c.empty() == true) {
+                localOffset++; // add length of ';'
+                continue;
+            }
+
+            // find the first '='
+            pos = c.find_first_of("=", 0);
+            std::string ckey = "";
+            std::string cval = "";
+
+            // if the cookie doesn't contains '=', its just a key
+            if (pos == std::string::npos) {
+                ckey = c;
+            }
+            // else split to two substrings by first =
+            else {
+                ckey = c.substr(0, pos);
+                // value will contains the next '=' chars if exists
+                // eg. foo=bar=baz -> key: foo, value: bar=baz
+                cval = c.substr(pos+1);
+            }
+
+            // ltrim the key - following the modsec v2 way
+            while (ckey.empty() == false && isspace(ckey.at(0))) {
+                ckey.erase(0, 1);
+                localOffset++;
+            }
+
+            // if the key is empty (eg: "Cookie:   =bar;") skip it
+            if (ckey.empty() == true) {
+                localOffset = localOffset + c.length() + 1;
+                continue;
+            }
+            else {
+                // handle cookie only if the key is not empty
+                // set cookie name
+                m_variableRequestCookiesNames.set(ckey,
+                        ckey, localOffset);
+                localOffset = localOffset + ckey.size() + 1;
+                // set cookie value
+                m_variableRequestCookies.set(ckey, cval,
+                        localOffset);
+                localOffset = localOffset + cval.size() + 1;
             }
         }
     }
@@ -826,9 +862,7 @@ int Transaction::processRequestBody() {
     std::vector<const VariableValue *> l;
     m_variableRequestHeaders.resolve(&l);
     for (auto &a : l) {
-        std::string z(a->m_key, 16, a->m_key.length() - 16);
-        z = z + ": " + a->m_value;
-        fullRequest = fullRequest + z + "\n";
+        fullRequest = fullRequest + a->getKey() + ": " + a->getValue() + "\n";
         delete a;
     }
 
@@ -929,11 +963,16 @@ int Transaction::appendRequestBody(const unsigned char *buf, size_t len) {
                 Rules::BodyLimitAction::RejectBodyLimitAction) {
                 ms_dbg(5, "Request body limit is marked to reject the " \
                     "request");
-                intervention::free(&m_it);
-                m_it.log = strdup("Request body limit is marked to " \
-                        "reject the request");
-                m_it.status = 403;
-                m_it.disruptive = true;
+                if (getRuleEngineState() == Rules::EnabledRuleEngine) {
+                    intervention::free(&m_it);
+                    m_it.log = strdup("Request body limit is marked to " \
+                            "reject the request");
+                    m_it.status = 403;
+                    m_it.disruptive = true;
+                } else {
+                    ms_dbg(5, "Not rejecting the request as the engine is " \
+                        "not Enabled");
+                }
             }
             return true;
         }
@@ -1183,11 +1222,16 @@ int Transaction::appendResponseBody(const unsigned char *buf, size_t len) {
                 Rules::BodyLimitAction::RejectBodyLimitAction) {
                 ms_dbg(5, "Response body limit is marked to reject the " \
                     "request");
-                intervention::free(&m_it);
-                m_it.log = strdup("Response body limit is marked to reject " \
-                    "the request");
-                m_it.status = 403;
-                m_it.disruptive = true;
+                if (getRuleEngineState() == Rules::EnabledRuleEngine) {
+                    intervention::free(&m_it);
+                    m_it.log = strdup("Response body limit is marked to reject " \
+                        "the request");
+                    m_it.status = 403;
+                    m_it.disruptive = true;
+                } else {
+                    ms_dbg(5, "Not rejecting the request as the engine is " \
+                        "not Enabled");
+                }
             }
             return true;
         }
@@ -1439,8 +1483,8 @@ std::string Transaction::toOldAuditLogFormat(int parts,
         m_variableRequestHeaders.resolve(&l);
         for (auto &h : l) {
             size_t pos = strlen("REQUEST_HEADERS:");
-            audit_log << h->m_key.c_str() + pos << ": ";
-            audit_log << h->m_value.c_str() << std::endl;
+            audit_log << h->getKeyWithCollection().c_str() + pos << ": ";
+            audit_log << h->getValue().c_str() << std::endl;
             delete h;
         }
         audit_log << std::endl;
@@ -1476,9 +1520,8 @@ std::string Transaction::toOldAuditLogFormat(int parts,
         audit_log << this->m_httpCodeReturned << std::endl;
         m_variableResponseHeaders.resolve(&l);
         for (auto &h : l) {
-            size_t pos = strlen("RESPONSE_HEADERS:");
-            audit_log << h->m_key.c_str() + pos << ": ";
-            audit_log << h->m_value.c_str() << std::endl;
+            audit_log << h->getKey().c_str() << ": ";
+            audit_log << h->getValue().c_str() << std::endl;
             delete h;
         }
     }
@@ -1576,8 +1619,7 @@ std::string Transaction::toJSON(int parts) {
 
         m_variableRequestHeaders.resolve(&l);
         for (auto &h : l) {
-            size_t pos = strlen("REQUEST_HEADERS:");
-            LOGFY_ADD(h->m_key.c_str() + pos, h->m_value.c_str());
+            LOGFY_ADD(h->getKey().c_str(), h->getValue().c_str());
             delete h;
         }
 
@@ -1593,7 +1635,7 @@ std::string Transaction::toJSON(int parts) {
         strlen("response"));
     yajl_gen_map_open(g);
 
-    if (parts & audit_log::AuditLog::GAuditLogPart) {
+    if (parts & audit_log::AuditLog::EAuditLogPart) {
         LOGFY_ADD("body", this->m_responseBody.str().c_str());
     }
     LOGFY_ADD_NUM("http_code", m_httpCodeReturned);
@@ -1607,8 +1649,7 @@ std::string Transaction::toJSON(int parts) {
 
         m_variableResponseHeaders.resolve(&l);
         for (auto &h : l) {
-            size_t pos = strlen("RESPONSE_HEADERS:");
-            LOGFY_ADD(h->m_key.c_str() + pos, h->m_value.c_str());
+            LOGFY_ADD(h->getKey().c_str(), h->getValue().c_str());
             delete h;
         }
 

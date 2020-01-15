@@ -603,7 +603,7 @@ bool Rule::checkExclusions(const std::string &key,
 void Rule::executeAction(Transaction *trans,
     bool containsBlock, std::shared_ptr<RuleMessage> ruleMessage,
     Action *a, bool defaultContext) {
-    if (a->isDisruptive() == false) {
+    if (a->isDisruptive() == false && a->m_name != "block") {
         ms_dbg_a(trans, 9, "Running " \
             "action: " + a->m_name);
         a->evaluate(this, trans, ruleMessage);
@@ -623,7 +623,7 @@ void Rule::executeAction(Transaction *trans,
         return;
     }
 
-    ms_dbg_a(trans, 4, "Not running disruptive action: " \
+    ms_dbg_a(trans, 4, "Not running any disruptive action (or block): " \
         + a->m_name + ". SecRuleEngine is not On.");
 }
 
@@ -752,8 +752,8 @@ bool Rule::evaluate(Transaction *trans,
         }
         var->evaluate(trans, this, &e);
         for (const VariableValue *v : e) {
-            const std::string &value = v->m_value;
-            const std::string &key = v->m_key;
+            const std::string &value = v->getValue();
+            const std::string &key = v->getKeyWithCollection();
 
             if (checkExclusions(key, exclusion, trans)) {
                 ms_dbg_a(trans, 9, std::string("Excluded match on key ") + key);
@@ -776,7 +776,7 @@ bool Rule::evaluate(Transaction *trans,
                 if (ret == true) {
                     ruleMessage->m_match = m_op->resolveMatchMessage(trans,
                         key, value);
-                    for (auto &i : v->m_orign) {
+                    for (auto &i : v->getOrigin()) {
                         ruleMessage->m_reference.append(i->toText());
                     }
 
@@ -841,9 +841,8 @@ end_exec:
     executeActionsAfterFullMatch(trans, containsBlock, ruleMessage);
 
     /* last rule in the chain. */
-    bool isItToBeLogged = ruleMessage->m_saveMessage;
-    if (isItToBeLogged && !m_containsMultiMatchAction
-        && !ruleMessage->m_message.empty()) {
+    bool isItToBeLogged = (ruleMessage->m_saveMessage && (m_chainedRuleParent == nullptr));
+    if (isItToBeLogged && !m_containsMultiMatchAction) {
         /* warn */
         trans->m_rulesMessages.push_back(*ruleMessage);
 
@@ -851,14 +850,6 @@ end_exec:
         if (!ruleMessage->m_isDisruptive) {
             trans->serverLog(ruleMessage);
 	}
-    }
-    else if (m_containsStaticBlockAction && !m_containsMultiMatchAction) {
-        /* warn */
-        trans->m_rulesMessages.push_back(*ruleMessage);
-        /* error */
-        if (!ruleMessage->m_isDisruptive) {
-            trans->serverLog(ruleMessage);
-        }
     }
 
     return true;

@@ -13,29 +13,20 @@
  *
  */
 
-#include "src/actions/audit_log.h"
+#include "src/variables/rule.h"
 
-#include <iostream>
-#include <string>
-#include <memory>
-
-#include "modsecurity/transaction.h"
-#include "modsecurity/rule_message.h"
-#include "modsecurity/rules.h"
 
 namespace modsecurity {
-namespace actions {
+namespace variables {
 
 
-bool AuditLog::evaluate(Rule *rule, Transaction *transaction,
-    std::shared_ptr<RuleMessage> rm) {
-    rm->m_noAuditLog = false;
-    ms_dbg_a(transaction, 9, "Saving transaction to logs");
-    rm->m_saveMessage = true;
-
-    return true;
-}
+const std::string Rule_DictElement::m_rule("RULE");
+const std::string Rule_DictElement::m_rule_id("id");
+const std::string Rule_DictElement::m_rule_rev("rev");
+const std::string Rule_DictElement::m_rule_severity("severity");
+const std::string Rule_DictElement::m_rule_logdata("logdata");
+const std::string Rule_DictElement::m_rule_msg("msg");
 
 
-}  // namespace actions
+}  // namespace variables
 }  // namespace modsecurity
